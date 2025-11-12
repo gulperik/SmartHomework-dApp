@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>SmartHomework dApp (Sepolia)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Ethers'ı 3 farklı CDN'den yedekli yükle -->
+    <script>
+      (function loadEthers() {
+        const cdns = [
+          "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js",
+          "https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js",
+          "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js",
+        ];
+        function tryNext(i) {
+          if (i >= cdns.length) {
+            console.error("Ethers yüklenemedi");
+            return;
+          }
+          const s = document.createElement("script");
+          s.src = cdns[i];
+          s.defer = true;
+          s.onload = () => {
+            if (typeof ethers !== "undefined") {
+              document.dispatchEvent(new Event("ethers-ready"));
+            } else {
+              tryNext(i + 1);
+            }
+          };
+          s.onerror = () => tryNext(i + 1);
+          document.head.appendChild(s);
+        }
+        tryNext(0);
+      })();
+    </script>
+
+    <style>
+      body {
+        font-family: system-ui, Arial;
+        max-width: 780px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      button {
+        padding: 8px 12px;
+        margin: 6px 6px 6px 0;
+        cursor: pointer;
+      }
+      button[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      input {
+        padding: 8px;
+        margin: 6px 6px 6px 0;
+        width: 220px;
+      }
+      .row {
+        margin: 10px 0;
+      }
+      .box {
+        border: 1px solid #ddd;
+        padding: 12px;
+        border-radius: 8px;
+      }
+      code {
+        background: #f6f6f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SmartHomework dApp (Sepolia)</h1>
+
+    <div class="box">
+      <div class="row">
+        <button id="btnConnect">Connect MetaMask</button>
+        <span id="account"></span>
+      </div>
+      <div class="row">
+        <strong>Network:</strong> <span id="network">?</span> (target
+        <code>11155111</code>)
+      </div>
+    </div>
+
+    <h2>Contract</h2>
+    <div class="box">
+      <div class="row"><strong>Address:</strong> <span id="addr"></span></div>
+      <div class="row">
+        <button id="btnGetCount" disabled>Get Count</button>
+        <span id="countVal">-</span>
+      </div>
+      <div class="row">
+        <button id="btnGetNote" disabled>Get Note</button>
+        <span id="noteVal">-</span>
+      </div>
+      <div class="row">
+        <button id="btnInc" disabled>Increment</button>
+        <button id="btnDec" disabled>Decrement</button>
+      </div>
+      <div class="row">
+        <input id="inpSetCount" type="number" placeholder="new count" />
+        <button id="btnSetCount" disabled>Set Count</button>
+      </div>
+      <div class="row">
+        <input id="inpSetNote" type="text" placeholder="new note" />
+        <button id="btnSetNote" disabled>Set Note</button>
+      </div>
+      <div class="row">
+        <strong>Last Tx Hash:</strong> <span id="txhash">-</span>
+      </div>
+      <div class="row">
+        <strong>Status:</strong> <span id="status">Idle</span>
+      </div>
+    </div>
+
+    <script>
+      document.addEventListener("ethers-ready", () => {
+        const CONTRACT_ADDRESS = "0x804d8020f6AA047998Cb104d92C1E1eea67E351d";
+
+        const ABI = [
+          {
+            inputs: [
+              { internalType: "uint256", name: "initial", type: "uint256" },
+              { internalType: "string", name: "initialNote", type: "string" },
+            ],
+            stateMutability: "nonpayable",
+            type: "constructor",
+          },
+          {
+            anonymous: false,
+            inputs: [
+              {
+                indexed: true,
+                internalType: "address",
+                name: "caller",
+                type: "address",
+              },
+              {
+                indexed: false,
+                internalType: "uint256",
+                name: "oldValue",
+                type: "uint256",
+              },
+              {
+                indexed: false,
+                internalType: "uint256",
+                name: "newValue",
+                type: "uint256",
+              },
+            ],
+            name: "CountChanged",
+            type: "event",
+          },
+          {
+            inputs: [],
+            name: "decrement",
+            outputs: [],
+            stateMutability: "nonpayable",
+            type: "function",
+          },
+          {
+            inputs: [],
+            name: "increment",
+            outputs: [],
+            stateMutability: "nonpayable",
+            type: "function",
+          },
+          {
+            anonymous: false,
+            inputs: [
+              {
+                indexed: true,
+                internalType: "address",
+                name: "caller",
+                type: "address",
+              },
+              {
+                indexed: false,
+                internalType: "string",
+                name: "note",
+                type: "string",
+              },
+            ],
+            name: "NoteChanged",
+            type: "event",
+          },
+          {
+            inputs: [
+              { internalType: "uint256", name: "newValue", type: "uint256" },
+            ],
+            name: "setCount",
+            outputs: [],
+            stateMutability: "nonpayable",
+            type: "function",
+          },
+          {
+            inputs: [{ internalType: "string", name: "note_", type: "string" }],
+            name: "setNote",
+            outputs: [],
+            stateMutability: "nonpayable",
+            type: "function",
+          },
+          {
+            inputs: [],
+            name: "getCount",
+            outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+            stateMutability: "view",
+            type: "function",
+          },
+          {
+            inputs: [],
+            name: "getNote",
+            outputs: [{ internalType: "string", name: "", type: "string" }],
+            stateMutability: "view",
+            type: "function",
+          },
+          {
+            inputs: [],
+            name: "owner",
+            outputs: [{ internalType: "address", name: "", type: "address" }],
+            stateMutability: "view",
+            type: "function",
+          },
+        ];
+
+        let provider, signer, contract;
+        const el = (id) => document.getElementById(id);
+        const setStatus = (t) => (el("status").textContent = t);
+        const toggleBtns = (on) => {
+          [
+            "btnGetCount",
+            "btnGetNote",
+            "btnInc",
+            "btnDec",
+            "btnSetCount",
+            "btnSetNote",
+          ].forEach((id) => (el(id).disabled = !on));
+        };
+
+        el("addr").textContent = CONTRACT_ADDRESS;
+
+        async function ensureSepoliaOrSwitch() {
+          const net = await provider.getNetwork();
+          el("network").textContent = `${net.name} (${net.chainId})`;
+
+          if (net.chainId === 11155111) return; // zaten Sepolia
+
+          // Önce switch etmeyi dene
+          try {
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0xaa36a7" }], // 11155111
+            });
+          } catch (err) {
+            // Eğer chain yoksa ekleyelim
+            if (err && err.code === 4902) {
+              try {
+                await window.ethereum.request({
+                  method: "wallet_addEthereumChain",
+                  params: [
+                    {
+                      chainId: "0xaa36a7",
+                      chainName: "Sepolia",
+                      nativeCurrency: {
+                        name: "SepoliaETH",
+                        symbol: "SEP",
+                        decimals: 18,
+                      },
+                      rpcUrls: ["https://rpc.sepolia.org"],
+                      blockExplorerUrls: ["https://sepolia.etherscan.io"],
+                    },
+                  ],
+                });
+              } catch (addErr) {
+                console.warn("Chain ekleme reddedildi:", addErr);
+                setStatus("Lütfen MetaMask ağını Sepolia'ya çevir.");
+                return;
+              }
+            } else {
+              console.warn("Switch reddedildi:", err);
+              setStatus("Lütfen MetaMask ağını Sepolia'ya çevir.");
+              return;
+            }
+          }
+          // Ağ değiştiyse etiketi güncelle
+          const net2 = await provider.getNetwork();
+          el("network").textContent = `${net2.name} (${net2.chainId})`;
+        }
+
+        async function connect() {
+          if (!window.ethereum) {
+            alert("MetaMask gerekli!");
+            return;
+          }
+          provider = new ethers.providers.Web3Provider(window.ethereum);
+          await provider.send("eth_requestAccounts", []);
+          signer = provider.getSigner();
+          const acc = await signer.getAddress();
+          el("account").textContent = acc;
+
+          await ensureSepoliaOrSwitch();
+
+          contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+          setStatus("Connected");
+          toggleBtns(true);
+        }
+
+        async function getCount() {
+          try {
+            setStatus("Reading count...");
+            const v = await contract.getCount();
+            el("countVal").textContent = v.toString();
+            setStatus("OK");
+          } catch (e) {
+            console.error(e);
+            setStatus("Read failed");
+          }
+        }
+        async function getNote() {
+          try {
+            setStatus("Reading note...");
+            const v = await contract.getNote();
+            el("noteVal").textContent = v;
+            setStatus("OK");
+          } catch (e) {
+            console.error(e);
+            setStatus("Read failed");
+          }
+        }
+
+        async function txWrap(p) {
+          setStatus("Sending tx...");
+          const tx = await p;
+          el("txhash").textContent = tx.hash;
+          setStatus("Waiting confirmation...");
+          await tx.wait();
+          setStatus("Confirmed");
+        }
+        async function inc() {
+          try {
+            await txWrap(contract.increment());
+            await getCount();
+          } catch (e) {
+            console.error(e);
+            setStatus("Tx failed");
+          }
+        }
+        async function dec() {
+          try {
+            await txWrap(contract.decrement());
+            await getCount();
+          } catch (e) {
+            console.error(e);
+            setStatus("Tx failed");
+          }
+        }
+        async function setCount() {
+          const n = parseInt(el("inpSetCount").value);
+          if (Number.isNaN(n)) return alert("Geçerli bir sayı gir");
+          try {
+            await txWrap(contract.setCount(n));
+            await getCount();
+          } catch (e) {
+            console.error(e);
+            setStatus("Tx failed");
+          }
+        }
+        async function setNote() {
+          const t = el("inpSetNote").value ?? "";
+          try {
+            await txWrap(contract.setNote(t));
+            await getNote();
+          } catch (e) {
+            console.error(e);
+            setStatus("Tx failed");
+          }
+        }
+
+        // bağla
+        el("btnConnect").onclick = connect;
+        el("btnGetCount").onclick = getCount;
+        el("btnGetNote").onclick = getNote;
+        el("btnInc").onclick = inc;
+        el("btnDec").onclick = dec;
+        el("btnSetCount").onclick = setCount;
+        el("btnSetNote").onclick = setNote;
+      });
+    </script>
+  </body>
+</html>
